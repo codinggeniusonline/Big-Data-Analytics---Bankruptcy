@@ -1,0 +1,303 @@
+library(e1071)
+library(dplyr)
+library(caTools)
+library(ggplot2)
+library(readxl)
+library(Hmisc)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(plyr)
+library(readxl) #Read excel files
+library(Hmisc) #Contents and Describe
+library(leaps) #Variable selection
+
+
+set.seed(42)
+
+setwd("C:/Users/Sarath Angathil/Desktop/Sem 2/Big Data/project/data")
+projectdata5 = read.csv("train25.csv")
+projectdata5$P<- NULL
+projectdata5$ID<-NULL
+str(projectdata5)
+
+
+
+# decision tree
+
+projectdata1 = read.csv("train21.csv")
+
+projectdata1$P<- NULL
+projectdata1$ID<-NULL
+describe(projectdata1)
+dtprojectdata<-projectdata1
+
+
+
+describe(dtprojectdata)
+#Randomize the data
+rand <- runif(nrow(dtprojectdata)) 
+dtprojectdatarand <- dtprojectdata[order(rand), ]
+
+#Build decision tree
+projecttree <- rpart(bstatus ~ ., data = dtprojectdatarand, method = "class")
+projecttree
+printcp(projecttree)
+plotcp(projecttree)
+
+
+
+fancyRpartPlot(projecttree)
+summary(projecttree)
+
+
+#Evaluate tree performance
+dtprojectdatatrain<-dtprojectdata
+dtprojectdatatrain$treepred <- predict(projecttree, dtprojectdatarand, type = "class")
+#dtprojectdatatrain$treepred <- predict(projecttree, dtprojectdatatrain, type = "class")
+table(Actual = dtprojectdatatrain$bstatus, Predicted = dtprojectdatatrain$treepred)
+
+
+projectdatatest = read.csv("Test.csv")
+result<-projectdatatest
+describe(result)
+
+dtprojectdatatest<-projectdatatest
+dtprojectdatatest$treepred <- predict(projecttree, dtprojectdatatest, type = "class")
+result$dtree<-round(as.numeric((dtprojectdatatest$treepred)))
+result$dtree<-ifelse(result$dtree == 2,1,0)
+result$dtree<-as.numeric(result$dtree)
+
+table(Actual = dtprojectdatatest$bstatus, Predicted = dtprojectdatatest$treepred)
+
+
+misClasificErrordtree <- mean(dtprojectdatatest$treepred != dtprojectdatatest$bstatus)
+print(paste('Accuracy',(1-misClasificErrordtree)*100))
+
+
+
+
+#Random forest
+
+library(randomForest)
+
+projectdata2 = read.csv("train22.csv")
+projectdata2$P<- NULL
+projectdata2$ID<-NULL
+
+rfprojectdata<-projectdata2
+describe(rfprojectdata)
+
+#Randomize the data
+rand <- runif(nrow(rfprojectdata)) 
+rfprojectdatarand <- rfprojectdata[order(rand), ]
+
+
+
+rftrain <- randomForest(as.factor(bstatus) ~ ., data = rfprojectdatarand, ntree = 800,na.action = na.roughfix)
+
+
+
+library("party")
+x <- ctree(bstatus ~ ., data=rfprojectdatarand)
+plot(x, type="simple")
+
+
+predictrmforest<- predict(rftrain,newdata = rfprojectdatarand)
+table(rfprojectdatarand$bstatus,predictrmforest)
+
+
+projectdatatest = read.csv("Test.csv")
+rfprojectdatatest<-projectdatatest
+
+predictrmforest<- predict(rftrain,newdata = rfprojectdatatest)
+
+result$rtree<-round(as.numeric(predictrmforest))
+result$rtree<-ifelse(result$rtree == 2,1,0)
+result$rtree<-as.numeric(result$rtree)
+
+
+table(rfprojectdatatest$bstatus,predictrmforest)
+
+misClasificErrorrtree <- mean(predictrmforest != rfprojectdatatest$bstatus)
+print(paste('Accuracy',(1-misClasificErrorrtree)*100))
+
+
+
+
+#svm
+
+projectdata3 = read.csv("train23.csv")
+projectdata3$P<- NULL
+projectdata3$ID<-NULL
+
+describe(projectdata3)
+
+rand3 <- runif(nrow(projectdata3)) 
+projectdata3 <- projectdata3[order(rand3), ]
+
+
+library(kernlab)
+
+svmtrain<-ksvm(as.factor(bstatus) ~ .,
+     data=projectdata3,
+     kernel="rbfdot",
+     prob.model=TRUE)
+
+
+predictsvm<- predict(svmtrain,newdata = projectdata3)
+table(projectdata3$bstatus,predictsvm)
+
+projectdatatest = read.csv("Test.csv")
+svmprojectdatatest<-projectdatatest
+
+predictsvm<- predict(svmtrain,newdata = svmprojectdatatest)
+result$svm<-round(as.numeric(predictsvm))
+result$svm<-ifelse(result$svm == 2,1,0)
+result$svm<-as.numeric(result$svm)
+
+table(svmprojectdatatest$bstatus,predictsvm)
+
+misClasificErrorsvm <- mean(predictsvm != svmprojectdatatest$bstatus)
+print(paste('Accuracy',(1-misClasificErrorsvm)*100))
+
+
+
+#neural netwrok
+
+projectdata4 = read.csv("train24.csv")
+projectdata4$P<- NULL
+projectdata4$ID<-NULL
+
+rand4 <- runif(nrow(projectdata4)) 
+projectdata4 <- projectdata4[order(rand4), ]
+
+library(nnet, quietly=TRUE)
+
+nntrain<- nnet(as.factor(bstatus) ~ .,
+                 data=projectdata4,
+                 size=10, skip=TRUE, MaxNWts=10000, trace=FALSE, maxit=100)
+
+
+
+
+cat(sprintf("A %s network with %d weights.\n",
+            paste(nntrain$n, collapse="-"),
+            length(nntrain$wts)))
+cat(sprintf("Inputs: %s.\n",
+            paste(nntrain$coefnames, collapse=", ")))
+cat(sprintf("Output: %s.\n",
+            names(attr(nntrain$terms, "dataClasses"))[1]))
+cat(sprintf("Sum of Squares Residuals: %.4f.\n",
+            sum(residuals(nntrain) ^ 2)))
+cat("\n")
+print(summary(nntrain))
+cat('\n')
+
+
+predictnn<- predict(nntrain,newdata = projectdata4)
+table(projectdata4$bstatus,round(predictnn))
+
+projectdatatest = read.csv("Test.csv")
+nnprojectdatatest<-projectdatatest
+predictnn<- predict(nntrain,newdata = nnprojectdatatest)
+result$nnet<-round(predictnn)
+table(nnprojectdatatest$bstatus,round(predictnn))
+misClasificErrornnet <- mean(round(predictnn) != nnprojectdatatest$bstatus)
+misClasificErrornnet
+print(paste('Accuracy',(1-misClasificErrornnet)*100))
+
+
+
+#logistic regression
+
+projectdata5 = read.csv("train25.csv")
+projectdata5$P<- NULL
+projectdata5$ID<-NULL
+
+rand5 <- runif(nrow(projectdata5)) 
+projectdata5 <- projectdata5[order(rand5), ]
+
+logrtrain <- glm(as.factor(bstatus) ~., data = projectdata5, family = binomial(link = "logit"))
+summary(logrtrain)
+
+logregdata<-projectdata5
+
+logregdata$wc_ta<-NULL
+logregdata$ni_ta<-NULL
+logregdata$cl_e<-NULL
+logregdata$wc_s<-NULL
+logregdata$in_s<-NULL
+logregdata$mve_td<-NULL
+logregdata$cf_td<-NULL
+
+logrtrain <- glm(as.factor(bstatus) ~., data = logregdata, family = binomial(link = "logit"))
+summary(logrtrain)
+
+
+anova(logrtrain, test="Chisq")
+
+library(pscl)
+pR2(logrtrain)
+
+
+
+
+fitted.results <- predict(logrtrain,newdata=logregdata)
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+
+misClasificError <- mean(fitted.results != logregdata$bstatus)
+print(paste('Accuracy',1-misClasificError))
+
+
+
+projectdatatest = read.csv("Test.csv")
+logrprojectdatatest<-projectdatatest
+
+#fitted.resultstest <- predict(logrtrain,newdata=logrprojectdatatest,type='response')
+
+fitted.resultstest <- predict(logrtrain,newdata=logrprojectdatatest)
+fitted.resultstest <- ifelse(fitted.resultstest > 0.5,1,0)
+fitted.resultstest
+
+
+table(logrprojectdatatest$bstatus,fitted.resultstest)
+
+
+result$logist<-(fitted.resultstest)
+misClasificError <- mean(fitted.resultstest != logrprojectdatatest$bstatus)
+print(paste('Accuracy',1-misClasificError))
+
+
+library(ROCR)
+p <- predict(logrtrain,newdata=logrprojectdatatest,type='response')
+pr <- prediction(p, logrprojectdatatest$bstatus)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+
+
+
+
+#ENSEMBLE MODEL
+
+
+#TAKING the sum
+result$prediction<-ifelse((result$dtree+result$rtree+result$nnet+result$logist+result$svm)>2,1,0)
+sum(result$prediction)
+table(result$bstatus,result$prediction)
+
+misClasificErrornnet <- mean(result$prediction != result$bstatus)
+print(paste('Accuracy',(1-misClasificErrornnet)*100))
+
+
+#Taking average of predictions
+result$pred_avg<-(result$dtree+result$rtree+result$nnet+result$logist+result$svm)/5
+
+#Splitting into binary classes at 0.5
+result$pred_avg<-ifelse(result$pred_avg>0.5,1,0)
+sum(result$pred_avg)
+
